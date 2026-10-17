@@ -20,12 +20,15 @@ def webhook():
         chat_id = message["chat"]["id"]
         file_id = None
 
-        # ভিডিও অথবা ডকুমেন্ট যেভাবেই পাঠাক ফাইল আইডি বের করবে
+        # যেকোনো ভিডিও, ডকুমেন্ট বা অডিও ফাইল চেক করা
         if "video" in message:
             file_id = message["video"]["file_id"]
         elif "document" in message:
             file_id = message["document"]["file_id"]
+        elif "audio" in message:
+            file_id = message["audio"]["file_id"]
 
+        # যদি ফাইল পাওয়া যায় তবে লিঙ্ক জেনারেট করবে
         if file_id:
             download_link = f"{DOMAIN}/dl/{file_id}"
             
@@ -35,6 +38,7 @@ def webhook():
                 "parse_mode": "Markdown"
             })
             
+        # শুধুমাত্র টেক্সট মেসেজ পাঠালে (ফাইল ছাড়া)
         elif "text" in message:
             requests.post(f"{TELEGRAM_API}/sendMessage", json={
                 "chat_id": chat_id,
