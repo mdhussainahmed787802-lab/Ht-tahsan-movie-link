@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 BOT_TOKEN = "8466409837:AAGBFHvpuUNdIzMev8k2MuCR_1RFxw2dhWE"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-DOMAIN = "https://dorothy.onrender.com"
+DOMAIN = "https://ht-tahsan-movie-link.onrender.com"
 
 @app.route("/")
 def home():
