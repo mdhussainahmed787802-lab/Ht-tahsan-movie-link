@@ -1,6 +1,5 @@
 import os
 import requests
-import json
 from flask import Flask, request, Response, stream_with_context
 
 app = Flask(__name__)
@@ -13,24 +12,41 @@ DOMAIN = "https://ht-tahsan-movie-link.onrender.com"
 def home():
     return "<h1>Telegram Direct Downloader Bot is Active!</h1>"
 
+def extract_file_id(msg):
+    """মেসেজের যেকোনো স্থান থেকে ফাইল আইডি খুঁজে বের করার ফাংশন"""
+    if not isinstance(msg, dict):
+        return None
+        
+    if "video" in msg:
+        return msg["video"]["file_id"]
+    elif "document" in msg:
+        return msg["document"]["file_id"]
+    elif "audio" in msg:
+        return msg["audio"]["file_id"]
+    elif "photo" in msg:
+        return msg["photo"][-1]["file_id"]
+    return None
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
-    if data and "message" in data:
-        message = data["message"]
-        chat_id = message["chat"]["id"]
-        
-        # ফাইল ধরা (video, document, audio, photo)
-        file_id = None
-        if "video" in message:
-            file_id = message["video"]["file_id"]
-        elif "document" in message:
-            file_id = message["document"]["file_id"]
-        elif "audio" in message:
-            file_id = message["audio"]["file_id"]
-        elif "photo" in message:
-            file_id = message["photo"][-1]["file_id"]
+    if not data:
+        return "OK", 200
 
+    # ১. টেলিগ্রামের যেকোনো ধরনের মেসেজ অবজেক্ট ধরা
+    msg = data.get("message") or data.get("edited_message") or data.get("channel_post") or data.get("edited_channel_post")
+    
+    if msg:
+        chat_id = msg["chat"]["id"]
+        
+        # ২. ফাইল আইডি চেক করা (সাধারণ ফাইল বা ফরোয়ার্ড ফাইল)
+        file_id = extract_file_id(msg)
+        
+        # যদি ফরোয়ার্ড করা মেসেজের ভেতরে আসল মেসেজ লুকানো থাকে
+        if not file_id and "reply_to_message" in msg:
+            file_id = extract_file_id(msg["reply_to_message"])
+
+        # ৩. ফাইল আইডি পেলে সরাসরি লিঙ্ক পাঠানো
         if file_id:
             download_link = f"{DOMAIN}/dl/{file_id}"
             
@@ -39,12 +55,11 @@ def webhook():
                 "text": f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক:**\n\n🔗 {download_link}\n\nএই লিংকে চাপ দিলেই ব্রাউজারে অটো ডাউনলোড শুরু হয়ে যাবে।",
                 "parse_mode": "Markdown"
             })
-        else:
-            # যদি ফাইল না চিনতে পারে, তবে মেসেজের আসল রূপ টেলিগ্রামে টেক্সট হিসেবে পাঠাবে
-            msg_type = list(message.keys())
+        # শুধুমাত্র সাধারণ টেক্সট পাঠালে
+        elif "text" in msg:
             requests.post(f"{TELEGRAM_API}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": f"⚠️ বোট এই মেসেজে কোনো ফাইল আইডি পায়নি।\n\nমেসেজের ধরন: {msg_type}"
+                "text": "👋 যেকোনো ভিডিও বা ফাইল আমাকে পাঠান বা ফরোয়ার্ড করুন, আমি ডাইরেক্ট লিঙ্ক বানিয়ে দেব।"
             })
             
     return "OK", 200
@@ -54,7 +69,7 @@ def direct_download(file_id):
     try:
         res = requests.get(f"{TELEGRAM_API}/getFile?file_id={file_id}").json()
         if not res.get("ok"):
-            return "Error: File not found.", 400
+            return "Error: File not found on Telegram servers.", 400
 
         file_path = res["result"]["file_path"]
         download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
