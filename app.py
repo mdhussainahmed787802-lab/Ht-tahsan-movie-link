@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 from flask import Flask, request, Response, stream_with_context
 
 app = Flask(__name__)
@@ -18,17 +19,18 @@ def webhook():
     if data and "message" in data:
         message = data["message"]
         chat_id = message["chat"]["id"]
+        
+        # ফাইল ধরা (video, document, audio, photo)
         file_id = None
-
-        # যেকোনো ভিডিও, ডকুমেন্ট বা অডিও ফাইল চেক করা
         if "video" in message:
             file_id = message["video"]["file_id"]
         elif "document" in message:
             file_id = message["document"]["file_id"]
         elif "audio" in message:
             file_id = message["audio"]["file_id"]
+        elif "photo" in message:
+            file_id = message["photo"][-1]["file_id"]
 
-        # যদি ফাইল পাওয়া যায় তবে লিঙ্ক জেনারেট করবে
         if file_id:
             download_link = f"{DOMAIN}/dl/{file_id}"
             
@@ -37,12 +39,12 @@ def webhook():
                 "text": f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক:**\n\n🔗 {download_link}\n\nএই লিংকে চাপ দিলেই ব্রাউজারে অটো ডাউনলোড শুরু হয়ে যাবে।",
                 "parse_mode": "Markdown"
             })
-            
-        # শুধুমাত্র টেক্সট মেসেজ পাঠালে (ফাইল ছাড়া)
-        elif "text" in message:
+        else:
+            # যদি ফাইল না চিনতে পারে, তবে মেসেজের আসল রূপ টেলিগ্রামে টেক্সট হিসেবে পাঠাবে
+            msg_type = list(message.keys())
             requests.post(f"{TELEGRAM_API}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": "👋 যেকোনো ভিডিও বা ফাইল আমাকে পাঠাতেন বা ফরোয়ার্ড করুন, আমি ডাইরেক্ট লিঙ্ক বানিয়ে দেব।"
+                "text": f"⚠️ বোট এই মেসেজে কোনো ফাইল আইডি পায়নি।\n\nমেসেজের ধরন: {msg_type}"
             })
             
     return "OK", 200
