@@ -16,10 +16,17 @@ def home():
 def webhook():
     data = request.get_json()
     if data and "message" in data:
-        chat_id = data["message"]["chat"]["id"]
-        
-        if "video" in data["message"]:
-            file_id = data["message"]["video"]["file_id"]
+        message = data["message"]
+        chat_id = message["chat"]["id"]
+        file_id = None
+
+        # ভিডিও অথবা ডকুমেন্ট যেভাবেই পাঠাক ফাইল আইডি বের করবে
+        if "video" in message:
+            file_id = message["video"]["file_id"]
+        elif "document" in message:
+            file_id = message["document"]["file_id"]
+
+        if file_id:
             download_link = f"{DOMAIN}/dl/{file_id}"
             
             requests.post(f"{TELEGRAM_API}/sendMessage", json={
@@ -28,10 +35,10 @@ def webhook():
                 "parse_mode": "Markdown"
             })
             
-        elif "text" in data["message"]:
+        elif "text" in message:
             requests.post(f"{TELEGRAM_API}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": "👋 যেকোনো ভিডিও আমাকে ফরোয়ার্ড করুন, আমি ডাইরেক্ট লিঙ্ক বানিয়ে দেব।"
+                "text": "👋 যেকোনো ভিডিও বা ফাইল আমাকে পাঠাতেন বা ফরোয়ার্ড করুন, আমি ডাইরেক্ট লিঙ্ক বানিয়ে দেব।"
             })
             
     return "OK", 200
@@ -55,7 +62,7 @@ def direct_download(file_id):
         return Response(
             stream_with_context(generate()),
             content_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename=video_{file_id[:6]}.mp4"}
+            headers={"Content-Disposition": f"attachment; filename=file_{file_id[:6]}.mp4"}
         )
     except Exception as e:
         return f"Download Error: {str(e)}"
