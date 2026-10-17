@@ -12,54 +12,56 @@ DOMAIN = "https://ht-tahsan-movie-link.onrender.com"
 def home():
     return "<h1>Telegram Direct Downloader Bot is Active!</h1>"
 
-def extract_file_id(msg):
-    """মেসেজের যেকোনো স্থান থেকে ফাইল আইডি খুঁজে বের করার ফাংশন"""
-    if not isinstance(msg, dict):
-        return None
-        
-    if "video" in msg:
-        return msg["video"]["file_id"]
-    elif "document" in msg:
-        return msg["document"]["file_id"]
-    elif "audio" in msg:
-        return msg["audio"]["file_id"]
-    elif "photo" in msg:
-        return msg["photo"][-1]["file_id"]
-    return None
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
     if not data:
         return "OK", 200
 
-    # ১. টেলিগ্রামের যেকোনো ধরনের মেসেজ অবজেক্ট ধরা
+    # টেলিগ্রামের যেকোনো মেসেজ, এডিটেড মেসেজ বা চ্যানেল পোস্ট ক্যাচ করা
     msg = data.get("message") or data.get("edited_message") or data.get("channel_post") or data.get("edited_channel_post")
     
     if msg:
-        chat_id = msg["chat"]["id"]
-        
-        # ২. ফাইল আইডি চেক করা (সাধারণ ফাইল বা ফরোয়ার্ড ফাইল)
-        file_id = extract_file_id(msg)
-        
-        # যদি ফরোয়ার্ড করা মেসেজের ভেতরে আসল মেসেজ লুকানো থাকে
-        if not file_id and "reply_to_message" in msg:
-            file_id = extract_file_id(msg["reply_to_message"])
+        chat_id = msg.get("chat", {}).get("id")
+        file_id = None
 
-        # ৩. ফাইল আইডি পেলে সরাসরি লিঙ্ক পাঠানো
-        if file_id:
+        # ১. সরাসরি মেসেজ থেকে ফাইল আইডি খোঁজা (ভিডিও, ডকুমেন্ট, অডিও, ছবি)
+        if "video" in msg:
+            file_id = msg["video"]["file_id"]
+        elif "document" in msg:
+            file_id = msg["document"]["file_id"]
+        elif "audio" in msg:
+            file_id = msg["audio"]["file_id"]
+        elif "photo" in msg:
+            file_id = msg["photo"][-1]["file_id"]
+
+        # ২. যদি সরাসরি না পাওয়া যায়, তবে ফরোয়ার্ড করা মেসেজ বা রিপ্লাই থেকে খোঁজা
+        if not file_id:
+            # ফরোয়ার্ড করা অরিজিনাল মেসেজ অবজেক্ট চেক করা
+            for key in ["forward_from_message", "reply_to_message"]:
+                if key in msg and isinstance(msg[key], dict):
+                    sub_msg = msg[key]
+                    if "video" in sub_msg:
+                        file_id = sub_msg["video"]["file_id"]
+                        break
+                    elif "document" in sub_msg:
+                        file_id = sub_msg["document"]["file_id"]
+                        break
+                    elif "audio" in sub_msg:
+                        file_id = sub_msg["audio"]["file_id"]
+                        break
+                    elif "photo" in sub_msg:
+                        file_id = sub_msg["photo"][-1]["file_id"]
+                        break
+
+        # ৩. যদি ফাইল আইডি পাওয়া যায়, তবে ডাইরেক্ট লিংক তৈরি করে পাঠানো
+        if file_id and chat_id:
             download_link = f"{DOMAIN}/dl/{file_id}"
             
             requests.post(f"{TELEGRAM_API}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক:**\n\n🔗 {download_link}\n\nএই লিংকে চাপ দিলেই ব্রাউজারে অটো ডাউনলোড শুরু হয়ে যাবে।",
                 "parse_mode": "Markdown"
-            })
-        # শুধুমাত্র সাধারণ টেক্সট পাঠালে
-        elif "text" in msg:
-            requests.post(f"{TELEGRAM_API}/sendMessage", json={
-                "chat_id": chat_id,
-                "text": "👋 যেকোনো ভিডিও বা ফাইল আমাকে পাঠান বা ফরোয়ার্ড করুন, আমি ডাইরেক্ট লিঙ্ক বানিয়ে দেব।"
             })
             
     return "OK", 200
