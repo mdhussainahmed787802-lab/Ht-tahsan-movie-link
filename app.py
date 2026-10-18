@@ -10,6 +10,14 @@ DOMAIN = "https://ht-tahsan-movie-link.onrender.com"
 
 app = Flask(__name__)
 
+def get_or_create_event_loop():
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
 @app.route("/")
 def home():
     return "<h1>Pyrogram Telegram Direct Downloader is Active!</h1>"
@@ -19,14 +27,13 @@ def webhook():
     data = request.get_json()
     if data:
         async def handle_update():
-            async with Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN) as bot:
+            async with Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True) as bot:
                 try:
                     msg_data = data.get("message") or data.get("edited_message") or data.get("channel_post") or data.get("edited_channel_post")
                     if msg_data:
                         chat_id = msg_data.get("chat", {}).get("id")
                         message_id = msg_data.get("message_id")
                         
-                        # Check if message contains media or forwarded media
                         has_media = any(k in msg_data for k in ["video", "document", "audio", "photo"])
                         if not has_media:
                             for key in ["forward_from_message", "reply_to_message"]:
@@ -43,19 +50,18 @@ def webhook():
                 except Exception as e:
                     print(f"Webhook error: {e}")
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
+        loop = get_or_create_event_loop()
+        if loop.is_running():
+            asyncio.run_coroutine_threadsafe(handle_update(), loop)
+        else:
             loop.run_until_complete(handle_update())
-        finally:
-            loop.close()
             
     return "OK", 200
 
 @app.route("/dl/<int:chat_id>/<int:message_id>")
 def direct_download(chat_id, message_id):
     async def stream_file():
-        async with Client("stream_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN) as stream_app:
+        async with Client("stream_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True) as stream_app:
             msg = await stream_app.get_messages(chat_id, message_id)
             if not msg or not (msg.video or msg.document or msg.audio or msg.photo):
                 return
@@ -63,18 +69,21 @@ def direct_download(chat_id, message_id):
                 yield chunk
 
     def generate():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            generator = stream_file()
-            while True:
-                try:
+        loop = get_or_create_event_loop()
+        generator = stream_file()
+        while True:
+            try:
+                if loop.is_running():
+                    future = asyncio.run_coroutine_threadsafe(generator.__anext__(), loop)
+                    chunk = future.result()
+                else:
                     chunk = loop.run_until_complete(generator.__anext__())
-                    yield chunk
-                except StopAsyncIteration:
-                    break
-        finally:
-            loop.close()
+                yield chunk
+            except (StopAsyncIteration, StopIteration):
+                break
+            except Exception as e:
+                print(f"Stream error: {e}")
+                break
 
     return Response(
         stream_with_context(generate()),
