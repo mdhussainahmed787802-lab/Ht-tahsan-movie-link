@@ -2,7 +2,6 @@ import os
 import asyncio
 from flask import Flask, request, Response, stream_with_context
 from pyrogram import Client
-from pyrogram.types import Message
 
 BOT_TOKEN = "8466409837:AAGBFHvpuUNdIzMev8k2MuCR_1RFxw2dhWE"
 API_ID = 36692904
@@ -13,36 +12,44 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "<h1>Telegram Large File Direct Downloader is Active!</h1>"
+    return "<h1>Pyrogram Telegram Direct Downloader is Active!</h1>"
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
     if data:
-        async def process_update():
+        async def handle_update():
             async with Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN) as bot:
                 try:
-                    update = bot.dispatcher.parse_update(data)
-                    if update and isinstance(update, Message):
-                        msg = update
-                        media = msg.video or msg.document or msg.audio or (msg.photo[-1] if msg.photo else None)
-                        if media:
-                            download_link = f"{DOMAIN}/dl/{msg.chat.id}/{msg.id}"
+                    msg_data = data.get("message") or data.get("edited_message") or data.get("channel_post") or data.get("edited_channel_post")
+                    if msg_data:
+                        chat_id = msg_data.get("chat", {}).get("id")
+                        message_id = msg_data.get("message_id")
+                        
+                        # Check if message contains media or forwarded media
+                        has_media = any(k in msg_data for k in ["video", "document", "audio", "photo"])
+                        if not has_media:
+                            for key in ["forward_from_message", "reply_to_message"]:
+                                if key in msg_data and isinstance(msg_data[key], dict):
+                                    has_media = True
+                                    break
+
+                        if has_media and chat_id and message_id:
+                            download_link = f"{DOMAIN}/dl/{chat_id}/{message_id}"
                             await bot.send_message(
-                                msg.chat.id,
-                                f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক:**\n\n🔗 {download_link}\n\nএই লিংকে ক্লিক করলেই ব্রাউজারে অটো ডাউনলোড শুরু হয়ে যাবে।"
+                                chat_id,
+                                f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক (২ জিবি পর্যন্ত):**\n\n🔗 {download_link}\n\nএই লিংকে ক্লিক করলেই ব্রাউজারে সরাসরি ডাউনলোড শুরু হয়ে যাবে।"
                             )
                 except Exception as e:
-                    print(f"Error handling update: {e}")
+                    print(f"Webhook error: {e}")
 
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            loop.run_until_complete(handle_update())
+        finally:
+            loop.close()
             
-        loop.run_until_complete(process_update())
-
     return "OK", 200
 
 @app.route("/dl/<int:chat_id>/<int:message_id>")
@@ -72,7 +79,7 @@ def direct_download(chat_id, message_id):
     return Response(
         stream_with_context(generate()),
         content_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename=file_{message_id}.mp4"}
+        headers={"Content-Disposition": f"attachment; filename=movie_file_{message_id}.mp4"}
     )
 
 if __name__ == "__main__":
