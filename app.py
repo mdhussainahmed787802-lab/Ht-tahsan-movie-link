@@ -6,7 +6,8 @@ from pyrogram import Client
 BOT_TOKEN = "8466409837:AAGBFHvpuUNdIzMev8k2MoCR_1RFxw2dhWE"
 API_ID = 36692904
 API_HASH = "3d17643f6fa017e4449b7b5794f416fd"
-DOMAIN = "https://ht-tahsan-movie-link.railway.app"  # আপনার রেলওয়ের আসল ডোমেইন এখানে থাকবে
+# রেলওয়ে প্রজেক্ট লাইভ হওয়ার পর যে লিংক পাবেন, সেটি এখানে বসাবেন (যেমন: https://xxx.railway.app)
+DOMAIN = "https://your-railway-app-url.railway.app"
 
 app = Flask(__name__)
 
@@ -35,10 +36,18 @@ def webhook():
                         message_id = msg_data.get("message_id")
                         
                         if chat_id and message_id:
-                            # সরাসরি Pyrogram দিয়ে মেসেজ চেক করা যাতে ফরোয়ার্ড করা মিডিয়াও ধরতে পারে
                             msg = await bot.get_messages(chat_id, message_id)
                             if msg and (msg.video or msg.document or msg.audio or msg.photo):
-                                download_link = f"{DOMAIN}/dl/{chat_id}/{message_id}"
+                                # ফাইলের আসল নাম বা ক্যাপশন বের করা যাতে লিঙ্কে সুন্দর নাম আসে
+                                file_name = "video.mp4"
+                                if msg.video and msg.video.file_name:
+                                    file_name = msg.video.file_name
+                                elif msg.document and msg.document.file_name:
+                                    file_name = msg.document.file_name
+                                elif msg.caption:
+                                    file_name = msg.caption[:30].strip() + ".mp4"
+                                
+                                download_link = f"{DOMAIN}/dl/{chat_id}/{message_id}/{file_name}"
                                 await bot.send_message(
                                     chat_id,
                                     f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক (২ জিবি পর্যন্ত):**\n\n🔗 {download_link}\n\nএই লিংকে ক্লিক করলেই ব্রাউজারে সরাসরি ডাউনলোড শুরু হয়ে যাবে।"
@@ -54,8 +63,9 @@ def webhook():
             
     return "OK", 200
 
-@app.route("/dl/<int:chat_id>/<int:message_id>")
-def direct_download(chat_id, message_id):
+@app.route("/dl/<int:chat_id>/<int:message_id>", defaults={"file_name": "video.mp4"})
+@app.route("/dl/<int:chat_id>/<int:message_id>/<path:file_name>")
+def direct_download(chat_id, message_id, file_name):
     async def stream_file():
         async with Client("stream_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True) as stream_app:
             msg = await stream_app.get_messages(chat_id, message_id)
@@ -84,7 +94,7 @@ def direct_download(chat_id, message_id):
     return Response(
         stream_with_context(generate()),
         content_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename=movie_file_{message_id}.mp4"}
+        headers={"Content-Disposition": f"attachment; filename={file_name}"}
     )
 
 if __name__ == "__main__":
