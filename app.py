@@ -6,8 +6,7 @@ from pyrogram import Client
 BOT_TOKEN = "8466409837:AAGBFHvpuUNdIzMev8k2MoCR_1RFxw2dhWE"
 API_ID = 36692904
 API_HASH = "3d17643f6fa017e4449b7b5794f416fd"
-# রেলওয়ে প্রজেক্ট লাইভ হওয়ার পর যে লিংক পাবেন, সেটি এখানে বসাবেন
-DOMAIN = "https://your-railway-app-url.railway.app"
+DOMAIN = "https://ht-tahsan-movie-link.railway.app"  # আপনার রেলওয়ের আসল ডোমেইন এখানে থাকবে
 
 app = Flask(__name__)
 
@@ -35,19 +34,15 @@ def webhook():
                         chat_id = msg_data.get("chat", {}).get("id")
                         message_id = msg_data.get("message_id")
                         
-                        has_media = any(k in msg_data for k in ["video", "document", "audio", "photo"])
-                        if not has_media:
-                            for key in ["forward_from_message", "reply_to_message"]:
-                                if key in msg_data and isinstance(msg_data[key], dict):
-                                    has_media = True
-                                    break
-
-                        if has_media and chat_id and message_id:
-                            download_link = f"{DOMAIN}/dl/{chat_id}/{message_id}"
-                            await bot.send_message(
-                                chat_id,
-                                f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক (২ জিবি পর্যন্ত):**\n\n🔗 {download_link}\n\nএই লিংকে ক্লিক করলেই ব্রাউজারে সরাসরি ডাউনলোড শুরু হয়ে যাবে।"
-                            )
+                        if chat_id and message_id:
+                            # সরাসরি Pyrogram দিয়ে মেসেজ চেক করা যাতে ফরোয়ার্ড করা মিডিয়াও ধরতে পারে
+                            msg = await bot.get_messages(chat_id, message_id)
+                            if msg and (msg.video or msg.document or msg.audio or msg.photo):
+                                download_link = f"{DOMAIN}/dl/{chat_id}/{message_id}"
+                                await bot.send_message(
+                                    chat_id,
+                                    f"✅ **আপনার ডাইরেক্ট ডাউনলোড লিংক (২ জিবি পর্যন্ত):**\n\n🔗 {download_link}\n\nএই লিংকে ক্লিক করলেই ব্রাউজারে সরাসরি ডাউনলোড শুরু হয়ে যাবে।"
+                                )
                 except Exception as e:
                     print(f"Webhook error: {e}")
 
